@@ -110,9 +110,10 @@ Go to `Settings -> System -> Spam Protection` to configure the plugin.
   `database`, `memcached`; `file` only on a single server); with `array` or
   `null` the settings page refuses the switch, and should the store change later
   the token is ignored and a warning is logged. Leave it off on pages served from a full-page
-  cache or a CDN, where every visitor would receive the same token, and on
-  multi-step or "send another" forms that post several times from one render,
-  since only the first post gets through.
+  cache or a CDN, where every visitor would receive the same token. A form that
+  posts several times from one render, such as a multi-step or "send another"
+  form, has to [refresh the token](#refreshing-the-single-use-token) between
+  posts, since only the first one gets through.
 * **Content** — discard submissions containing blocked keywords, more links than
   you allow, Cyrillic script, or a random string such as `drLTJlJFcwNYHCFgIjpS`
   (a word of ten or more letters that switches case at least three times and contains adjacent capitals or digits), and cap how many submissions one visitor may send
@@ -124,6 +125,38 @@ form or an endpoint unprotected. Add one path per row; wildcards such as `api/*`
 are supported. The
 honeypot middleware runs before a page is resolved, so exclusions are matched
 against the request path rather than set on the page itself.
+
+## Refreshing the single-use token
+
+A rendered form carries one token and the token is spent by the first submission
+that gets through. When the form stays on the page and posts again, ask the
+component for a fresh token first. The `onRefreshSpamToken` handler returns the
+field name and a new token (or `null` while the setting is off). Call it with
+`jax.ajax`, not from the form: an AJAX request that names the handler runs nothing
+but that handler, so it is let through without any check even with the spent
+token still in the form.
+
+```html
+<form data-request="onSubmit" data-request-success="refreshSpamToken(this)">
+    {% component 'spamProtection' %}
+</form>
+
+<script>
+function refreshSpamToken(form) {
+    jax.ajax('spamProtection::onRefreshSpamToken', {
+        success: function (data) {
+            var field = form.querySelector('[name="' + data.spamTokenField + '"]');
+            if (field && data.spamToken) {
+                field.value = data.spamToken;
+            }
+        }
+    });
+}
+</script>
+```
+
+Call it the same way when a step of a multi-step form has been accepted. A
+submission that fails validation keeps its token, so nothing needs refreshing then.
 
 ## Content Security Policy
 
